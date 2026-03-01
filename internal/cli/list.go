@@ -1,0 +1,79 @@
+package cli
+
+import (
+	"fmt"
+	"path/filepath"
+
+	"github.com/fatih/color"
+	"github.com/k15z/axiom/internal/config"
+	"github.com/k15z/axiom/internal/discovery"
+	"github.com/k15z/axiom/internal/runner"
+	"github.com/spf13/cobra"
+)
+
+func newListCmd() *cobra.Command {
+	var dir string
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all tests and their cached status",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Load config without requiring API key (list doesn't run agents)
+			cfg := config.Default()
+			if dir != "" {
+				cfg.TestDir = dir
+			}
+			// Best-effort config file load (ignore API key error)
+			if loaded, err := config.Load(dir); err == nil {
+				cfg = loaded
+			}
+
+			tests, err := discovery.Discover(cfg.TestDir)
+			if err != nil {
+				return fmt.Errorf("discovery: %w", err)
+			}
+			if len(tests) == 0 {
+				fmt.Println("No tests found.")
+				return nil
+			}
+
+			repoRoot, _ := filepath.Abs(".")
+			statuses := runner.GetStatuses(tests, cfg.Cache.Dir, repoRoot)
+
+			gray := color.New(color.FgHiBlack)
+			green := color.New(color.FgGreen)
+			red := color.New(color.FgRed)
+
+			currentFile := ""
+			for _, s := range statuses {
+				if s.Test.SourceFile != currentFile {
+					currentFile = s.Test.SourceFile
+					fmt.Printf("\n  .axiom/%s\n", currentFile)
+				}
+
+				var label string
+				var c *color.Color
+				switch s.Status {
+				case "cached-pass":
+					label, c = "cached (pass)", gray
+				case "cached-fail":
+					label, c = "cached (fail)", gray
+				case "stale-pass":
+					label, c = "stale (pass)", green
+				case "stale-fail":
+					label, c = "stale (fail)", red
+				default:
+					label, c = "pending", gray
+				}
+
+				fmt.Printf("    %s ", s.Test.Name)
+				c.Printf("[%s]\n", label)
+			}
+			fmt.Println()
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&dir, "dir", "d", "", "Path to test directory")
+	return cmd
+}

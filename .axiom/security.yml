@@ -1,0 +1,19 @@
+test_path_traversal_prevention:
+  on:
+    - internal/agent/tools.go
+  condition: >
+    All agent tools that accept file paths (read_file, list_dir, glob, grep) must
+    validate that resolved paths do not escape the repository root directory. There
+    should be a shared path validation function that converts relative paths to
+    absolute, then checks they are prefixed by the repo root. Paths like "../../../etc/passwd"
+    must be rejected.
+
+test_no_arbitrary_command_execution:
+  on:
+    - internal/agent/*.go
+  condition: >
+    The agent must not have any tool that allows arbitrary shell command execution.
+    The only tool that runs a subprocess should be grep, and it must construct the
+    command itself from validated parameters — it should never pass user/LLM-provided
+    strings directly as the command to exec. No tool should use sh -c or similar
+    shell invocation.

@@ -1,0 +1,18 @@
+test_clean_package_dependencies:
+  on:
+    - internal/**/*.go
+  condition: >
+    The internal packages should have clean dependency flow: cli depends on
+    config, discovery, runner, and output. Runner depends on agent, cache,
+    config, and discovery. Agent should NOT import from cli, runner, output,
+    or discovery. Cache should NOT import from agent, runner, cli, or output.
+    No circular dependencies should exist.
+
+test_agent_tool_loop_terminates:
+  on:
+    - internal/agent/agent.go
+  condition: >
+    The agent tool loop must have a maximum iteration limit to prevent runaway
+    API calls. If the agent exceeds this limit, it should return a failure result
+    rather than looping indefinitely. The limit should be clearly defined as a
+    constant or configurable parameter.

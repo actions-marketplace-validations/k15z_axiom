@@ -1,0 +1,8 @@
+# Binary (compiled output at repo root)
+/axiom
+
+# Test artifacts
+.axiom/.cache/
+
+# Environment variables
+.env

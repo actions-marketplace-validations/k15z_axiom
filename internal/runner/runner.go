@@ -1,0 +1,209 @@
+package runner
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/k15z/axiom/internal/agent"
+	"github.com/k15z/axiom/internal/cache"
+	"github.com/k15z/axiom/internal/config"
+	"github.com/k15z/axiom/internal/discovery"
+	"github.com/k15z/axiom/internal/display"
+)
+
+type TestResult struct {
+	Test      discovery.Test
+	Passed    bool
+	Cached    bool
+	Skipped   bool // true when skipped due to --bail
+	Reasoning string
+	Duration  time.Duration
+}
+
+type Options struct {
+	All         bool
+	Filter      string
+	Bail        bool
+	Verbose     bool
+	Concurrency int // ≤1 means sequential
+}
+
+func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Options) ([]TestResult, error) {
+	repoRoot, _ := filepath.Abs(".")
+
+	var c *cache.Cache
+	var cacheMu sync.Mutex
+	if cfg.Cache.Enabled && !opts.All {
+		var err error
+		c, err = cache.Load(cfg.Cache.Dir)
+		if err != nil {
+			c = cache.New(cfg.Cache.Dir)
+		}
+	}
+
+	concurrency := opts.Concurrency
+	if concurrency <= 1 {
+		concurrency = 1
+	}
+
+	// Bail support: cancel remaining tests on first failure
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Live display — one spinner line per running test
+	live := display.NewLiveDisplay()
+
+	// Pre-allocate results slice to preserve original test order
+	results := make([]TestResult, len(tests))
+	included := make([]bool, len(tests))
+
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
+	for i, test := range tests {
+		if opts.Filter != "" {
+			if matched, _ := filepath.Match(opts.Filter, test.Name); !matched {
+				continue
+			}
+		}
+
+		// Cache check
+		cacheMu.Lock()
+		if c != nil && len(test.On) > 0 {
+			if skip, _ := c.ShouldSkip(test.Name, test.On, repoRoot); skip {
+				entry, _ := c.GetEntry(test.Name)
+				passed := entry.Result == "pass"
+				results[i] = TestResult{Test: test, Passed: passed, Cached: true}
+				included[i] = true
+				cacheMu.Unlock()
+				live.StartTest(test.Name)
+				live.FinishTest(test.Name, passed, true, false, 0)
+				continue
+			}
+		}
+		cacheMu.Unlock()
+
+		included[i] = true
+		idx := i
+		t := test
+
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			// Check if bailed before starting
+			select {
+			case <-ctx.Done():
+				results[idx] = TestResult{Test: t, Skipped: true}
+				live.StartTest(t.Name)
+				live.FinishTest(t.Name, false, false, true, 0)
+				return
+			default:
+			}
+
+			live.StartTest(t.Name)
+
+			progress := func(e agent.Event) {
+				var status string
+				switch e.Kind {
+				case "thinking":
+					status = e.Message
+				case "tool_call":
+					status = "→ " + e.Message
+				default:
+					return
+				}
+				live.Update(t.Name, status)
+			}
+
+			start := time.Now()
+			result, err := agent.Run(ctx, cfg.APIKey, cfg.Model, t.Condition, t.On, repoRoot, progress)
+			duration := time.Since(start)
+
+			tr := TestResult{Test: t, Duration: duration}
+			if err != nil {
+				tr.Passed = false
+				tr.Reasoning = "Agent error: " + err.Error()
+			} else {
+				tr.Passed = result.Passed
+				tr.Reasoning = result.Reasoning
+			}
+			results[idx] = tr
+
+			live.FinishTest(t.Name, tr.Passed, false, false, duration)
+
+			cacheMu.Lock()
+			if c != nil {
+				res := "fail"
+				if err == nil && result.Passed {
+					res = "pass"
+				}
+				c.Update(t.Name, res, cache.HashGlobs(t.On, repoRoot))
+			}
+			cacheMu.Unlock()
+
+			if opts.Bail && err == nil && !result.Passed {
+				cancel()
+			}
+		}()
+	}
+
+	wg.Wait()
+	live.Close()
+
+	// Blank line between live display and final summary
+	fmt.Fprintln(os.Stderr)
+
+	if c != nil {
+		cacheMu.Lock()
+		_ = c.Save()
+		cacheMu.Unlock()
+	}
+
+	// Collect results in original order
+	var out []TestResult
+	for i, r := range results {
+		if included[i] {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// ClearCache deletes the test cache. Used by the cache clear command.
+func ClearCache(cacheDir string) error {
+	return cache.New(cacheDir).Clear()
+}
+
+// TestStatus describes the cached state of a single test.
+type TestStatus struct {
+	Test   discovery.Test
+	Status string // "pending" | "cached-pass" | "cached-fail" | "stale-pass" | "stale-fail"
+}
+
+// GetStatuses returns the cached status for each test without running any agents.
+func GetStatuses(tests []discovery.Test, cacheDir string, repoRoot string) []TestStatus {
+	c, _ := cache.Load(cacheDir)
+	statuses := make([]TestStatus, len(tests))
+	for i, t := range tests {
+		s := TestStatus{Test: t, Status: "pending"}
+		if c != nil {
+			if entry, ok := c.GetEntry(t.Name); ok {
+				skip, _ := c.ShouldSkip(t.Name, t.On, repoRoot)
+				if skip {
+					s.Status = "cached-" + entry.Result
+				} else {
+					s.Status = "stale-" + entry.Result
+				}
+			}
+		}
+		statuses[i] = s
+	}
+	return statuses
+}

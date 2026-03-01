@@ -1,0 +1,267 @@
+package agent
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/k15z/axiom/internal/glob"
+)
+
+const maxOutputBytes = 100_000 // truncate tool output beyond this
+
+// toolDefs returns the tool definitions for the agent.
+func toolDefs() []anthropic.ToolUnionParam {
+	return []anthropic.ToolUnionParam{
+		{OfTool: &anthropic.ToolParam{
+			Name:        "read_file",
+			Description: anthropic.String("Read the contents of a file. Returns the file contents with line numbers."),
+			InputSchema: jsonSchema(map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path": map[string]any{
+						"type":        "string",
+						"description": "Relative path to the file from the repository root",
+					},
+				},
+				"required": []string{"path"},
+			}),
+		}},
+		{OfTool: &anthropic.ToolParam{
+			Name:        "glob",
+			Description: anthropic.String("Find files matching a glob pattern. Returns a list of matching file paths. Supports ** for recursive matching."),
+			InputSchema: jsonSchema(map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"pattern": map[string]any{
+						"type":        "string",
+						"description": "Glob pattern (e.g. 'src/**/*.py', '*.go', 'internal/*/config.go')",
+					},
+				},
+				"required": []string{"pattern"},
+			}),
+		}},
+		{OfTool: &anthropic.ToolParam{
+			Name:        "grep",
+			Description: anthropic.String("Search file contents using a regex pattern. Returns matching lines with file paths and line numbers."),
+			InputSchema: jsonSchema(map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"pattern": map[string]any{
+						"type":        "string",
+						"description": "Regex pattern to search for",
+					},
+					"glob": map[string]any{
+						"type":        "string",
+						"description": "Optional glob to filter which files to search (e.g. '*.py'). If omitted, searches all files.",
+					},
+				},
+				"required": []string{"pattern"},
+			}),
+		}},
+		{OfTool: &anthropic.ToolParam{
+			Name:        "list_dir",
+			Description: anthropic.String("List the contents of a directory. Returns file and directory names."),
+			InputSchema: jsonSchema(map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path": map[string]any{
+						"type":        "string",
+						"description": "Relative path to the directory from the repository root. Use '.' for the root.",
+					},
+				},
+				"required": []string{"path"},
+			}),
+		}},
+	}
+}
+
+func jsonSchema(v any) anthropic.ToolInputSchemaParam {
+	raw, _ := json.Marshal(v)
+	var schema anthropic.ToolInputSchemaParam
+	json.Unmarshal(raw, &schema)
+	return schema
+}
+
+// executeTool dispatches a tool call and returns the result string.
+func executeTool(name string, inputJSON json.RawMessage, repoRoot string) (string, bool) {
+	var input map[string]any
+	if err := json.Unmarshal(inputJSON, &input); err != nil {
+		return fmt.Sprintf("error parsing input: %s", err), true
+	}
+
+	switch name {
+	case "read_file":
+		return toolReadFile(getString(input, "path"), repoRoot)
+	case "glob":
+		return toolGlob(getString(input, "pattern"), repoRoot)
+	case "grep":
+		return toolGrep(getString(input, "pattern"), getString(input, "glob"), repoRoot)
+	case "list_dir":
+		return toolListDir(getString(input, "path"), repoRoot)
+	default:
+		return fmt.Sprintf("unknown tool: %s", name), true
+	}
+}
+
+func getString(m map[string]any, key string) string {
+	v, _ := m[key].(string)
+	return v
+}
+
+func safePath(rel, root string) (string, error) {
+	if rel == "" {
+		return filepath.Abs(root)
+	}
+	abs := filepath.Join(root, rel)
+	abs, err := filepath.Abs(abs)
+	if err != nil {
+		return "", err
+	}
+	rootAbs, _ := filepath.Abs(root)
+	// Use separator suffix to avoid /foo matching /foobar
+	if abs != rootAbs && !strings.HasPrefix(abs, rootAbs+string(filepath.Separator)) {
+		return "", fmt.Errorf("path %q is outside the repository root", rel)
+	}
+	return abs, nil
+}
+
+func toolReadFile(path, root string) (string, bool) {
+	abs, err := safePath(path, root)
+	if err != nil {
+		return err.Error(), true
+	}
+
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return fmt.Sprintf("error reading file: %s", err), true
+	}
+
+	lines := strings.Split(string(data), "\n")
+	var b strings.Builder
+	for i, line := range lines {
+		fmt.Fprintf(&b, "%4d | %s\n", i+1, line)
+	}
+
+	return truncate(b.String()), false
+}
+
+func toolGlob(pattern, root string) (string, bool) {
+	// Validate the non-wildcard prefix using the shared safePath function.
+	// This rejects absolute paths, .. traversal, and anything outside the repo root.
+	prefix := pattern
+	if idx := strings.IndexAny(pattern, "*?["); idx != -1 {
+		prefix = filepath.Dir(pattern[:idx])
+		if prefix == "." {
+			prefix = ""
+		}
+	}
+	if _, err := safePath(prefix, root); err != nil {
+		return fmt.Sprintf("invalid pattern %q: %s", pattern, err), true
+	}
+
+	var matches []string
+
+	// Use WalkDir for ** support
+	rootAbs, _ := filepath.Abs(root)
+	filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		// Skip hidden dirs (like .git)
+		if d.IsDir() && strings.HasPrefix(d.Name(), ".") && path != rootAbs {
+			return filepath.SkipDir
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		rel, err := filepath.Rel(rootAbs, path)
+		if err != nil {
+			return nil
+		}
+
+		if glob.Match(pattern, rel) {
+			matches = append(matches, rel)
+		}
+		return nil
+	})
+
+	if len(matches) == 0 {
+		return "no files matched", false
+	}
+
+	return truncate(strings.Join(matches, "\n")), false
+}
+
+func toolGrep(pattern, glob, root string) (string, bool) {
+	// The glob filter is a filename-only pattern (e.g. "*.go"); reject path traversal
+	if strings.Contains(glob, "..") || strings.HasPrefix(glob, "/") {
+		return fmt.Sprintf("invalid glob filter %q: must be a filename pattern, not a path", glob), true
+	}
+
+	// Validate root is accessible (sanity check via safePath with empty rel)
+	rootAbs, err := safePath("", root)
+	if err != nil {
+		return err.Error(), true
+	}
+
+	args := []string{"-rn", "--color=never"}
+	if glob != "" {
+		args = append(args, "--include="+glob)
+	}
+	args = append(args, pattern, rootAbs)
+
+	cmd := exec.Command("grep", args...)
+	out, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return "no matches found", false
+		}
+		return fmt.Sprintf("grep error: %s", err), true
+	}
+
+	// Make paths relative
+	result := strings.ReplaceAll(string(out), rootAbs+"/", "")
+
+	return truncate(result), false
+}
+
+func toolListDir(path, root string) (string, bool) {
+	abs, err := safePath(path, root)
+	if err != nil {
+		return err.Error(), true
+	}
+
+	entries, err := os.ReadDir(abs)
+	if err != nil {
+		return fmt.Sprintf("error listing directory: %s", err), true
+	}
+
+	var b strings.Builder
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") {
+			continue // skip hidden files
+		}
+		suffix := ""
+		if e.IsDir() {
+			suffix = "/"
+		}
+		fmt.Fprintf(&b, "%s%s\n", e.Name(), suffix)
+	}
+
+	return truncate(b.String()), false
+}
+
+func truncate(s string) string {
+	if len(s) > maxOutputBytes {
+		return s[:maxOutputBytes] + "\n... (truncated)"
+	}
+	return s
+}
+
