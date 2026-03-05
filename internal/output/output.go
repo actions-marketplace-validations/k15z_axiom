@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/k15z/axiom/internal/runner"
+	"github.com/k15z/axiom/internal/types"
 )
 
 var (
@@ -17,13 +17,13 @@ var (
 	bold  = color.New(color.Bold)
 )
 
-func Print(results []runner.TestResult, verbose bool) {
+func Print(results []types.TestResult, verbose bool) {
 	fmt.Println()
 	bold.Println("  axiom")
 	fmt.Println()
 
 	// Group by source file
-	groups := make(map[string][]runner.TestResult)
+	groups := make(map[string][]types.TestResult)
 	var order []string
 	for _, r := range results {
 		if _, seen := groups[r.Test.SourceFile]; !seen {
@@ -104,7 +104,7 @@ func Print(results []runner.TestResult, verbose bool) {
 	fmt.Println()
 }
 
-func PrintJSON(results []runner.TestResult) error {
+func PrintJSON(results []types.TestResult) error {
 	type jsonResult struct {
 		Name      string  `json:"name"`
 		File      string  `json:"file"`
@@ -138,7 +138,7 @@ func printReasoning(reasoning, indent string) {
 	}
 }
 
-func HasFailures(results []runner.TestResult) bool {
+func HasFailures(results []types.TestResult) bool {
 	for _, r := range results {
 		if !r.Passed && !r.Cached && !r.Skipped {
 			return true

@@ -13,16 +13,8 @@ import (
 	"github.com/k15z/axiom/internal/config"
 	"github.com/k15z/axiom/internal/discovery"
 	"github.com/k15z/axiom/internal/display"
+	"github.com/k15z/axiom/internal/types"
 )
-
-type TestResult struct {
-	Test      discovery.Test
-	Passed    bool
-	Cached    bool
-	Skipped   bool // true when skipped due to --bail
-	Reasoning string
-	Duration  time.Duration
-}
 
 type Options struct {
 	All         bool
@@ -32,7 +24,7 @@ type Options struct {
 	Concurrency int // ≤1 means sequential
 }
 
-func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Options) ([]TestResult, error) {
+func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Options) ([]types.TestResult, error) {
 	repoRoot, _ := filepath.Abs(".")
 
 	var c *cache.Cache
@@ -58,7 +50,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 	live := display.NewLiveDisplay()
 
 	// Pre-allocate results slice to preserve original test order
-	results := make([]TestResult, len(tests))
+	results := make([]types.TestResult, len(tests))
 	included := make([]bool, len(tests))
 
 	sem := make(chan struct{}, concurrency)
@@ -77,7 +69,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			if skip, _ := c.ShouldSkip(test.Name, test.On, repoRoot); skip {
 				entry, _ := c.GetEntry(test.Name)
 				passed := entry.Result == "pass"
-				results[i] = TestResult{Test: test, Passed: passed, Cached: true}
+				results[i] = types.TestResult{Test: test, Passed: passed, Cached: true}
 				included[i] = true
 				cacheMu.Unlock()
 				live.StartTest(test.Name)
@@ -100,7 +92,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			// Check if bailed before starting
 			select {
 			case <-ctx.Done():
-				results[idx] = TestResult{Test: t, Skipped: true}
+				results[idx] = types.TestResult{Test: t, Skipped: true}
 				live.StartTest(t.Name)
 				live.FinishTest(t.Name, false, false, true, 0)
 				return
@@ -126,7 +118,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			result, err := agent.Run(ctx, cfg.APIKey, cfg.Model, t.Condition, t.On, repoRoot, progress)
 			duration := time.Since(start)
 
-			tr := TestResult{Test: t, Duration: duration}
+			tr := types.TestResult{Test: t, Duration: duration}
 			if err != nil {
 				tr.Passed = false
 				tr.Reasoning = "Agent error: " + err.Error()
@@ -167,7 +159,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 	}
 
 	// Collect results in original order
-	var out []TestResult
+	var out []types.TestResult
 	for i, r := range results {
 		if included[i] {
 			out = append(out, r)
@@ -181,18 +173,12 @@ func ClearCache(cacheDir string) error {
 	return cache.New(cacheDir).Clear()
 }
 
-// TestStatus describes the cached state of a single test.
-type TestStatus struct {
-	Test   discovery.Test
-	Status string // "pending" | "cached-pass" | "cached-fail" | "stale-pass" | "stale-fail"
-}
-
 // GetStatuses returns the cached status for each test without running any agents.
-func GetStatuses(tests []discovery.Test, cacheDir string, repoRoot string) []TestStatus {
+func GetStatuses(tests []discovery.Test, cacheDir string, repoRoot string) []types.TestStatus {
 	c, _ := cache.Load(cacheDir)
-	statuses := make([]TestStatus, len(tests))
+	statuses := make([]types.TestStatus, len(tests))
 	for i, t := range tests {
-		s := TestStatus{Test: t, Status: "pending"}
+		s := types.TestStatus{Test: t, Status: "pending"}
 		if c != nil {
 			if entry, ok := c.GetEntry(t.Name); ok {
 				skip, _ := c.ShouldSkip(t.Name, t.On, repoRoot)
