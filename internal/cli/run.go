@@ -152,6 +152,23 @@ func newRunCmd() *cobra.Command {
 				default:
 					output.Print(results, cfg.Model, verbose)
 				}
+			} else {
+				passed, failed, cached, skipped, errored := 0, 0, 0, 0, 0
+				for _, r := range results {
+					switch {
+					case r.Cached:
+						cached++
+					case r.Skipped:
+						skipped++
+					case r.Errored:
+						errored++
+					case r.Passed:
+						passed++
+					default:
+						failed++
+					}
+				}
+				fmt.Fprintf(os.Stderr, "axiom: %s\n", output.CISummary(passed, failed, errored, cached, skipped))
 			}
 
 			if output.HasFailures(results) {
