@@ -46,6 +46,16 @@ func Default() Config {
 }
 
 func Load(testDir string) (Config, error) {
+	return load(testDir, true)
+}
+
+// LoadForDryRun loads config without requiring ANTHROPIC_API_KEY.
+// Used by --dry-run mode which performs discovery and cache checks only.
+func LoadForDryRun(testDir string) (Config, error) {
+	return load(testDir, false)
+}
+
+func load(testDir string, requireKey bool) (Config, error) {
 	// Load .env before anything else so vars are available via os.Getenv
 	loadDotEnv()
 
@@ -83,7 +93,7 @@ func Load(testDir string) (Config, error) {
 	}
 
 	cfg.APIKey = os.Getenv("ANTHROPIC_API_KEY")
-	if cfg.APIKey == "" {
+	if cfg.APIKey == "" && requireKey {
 		return cfg, fmt.Errorf("ANTHROPIC_API_KEY is not set (set it in the environment or a .env file)")
 	}
 
