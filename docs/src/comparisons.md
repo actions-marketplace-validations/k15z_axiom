@@ -55,7 +55,7 @@ Axiom occupies a unique space -- it verifies behavioral properties of code using
 
 ## Axiom vs Manual Code Review
 
-**Code review** is the gold standard for catching architectural violations, security issues, and design problems. But it's slow, inconsistent, and doesn't scale.
+**Code review** catches architectural violations, security issues, and design problems. But it's slow, inconsistent, and doesn't scale.
 
 **Axiom** automates the kinds of checks that senior engineers do in code review.
 

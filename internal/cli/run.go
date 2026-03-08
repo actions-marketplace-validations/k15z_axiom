@@ -118,7 +118,7 @@ func newRunCmd() *cobra.Command {
 						statuses[i].Status = "pending"
 					}
 				}
-				output.PrintDryRun(statuses, cfg.Model, cfg.Agent.MaxTokens)
+				output.PrintDryRun(statuses, cfg.Model, cfg.Agent.MaxTokens, cfg.TestDir)
 				return nil
 			}
 
@@ -150,10 +150,10 @@ func newRunCmd() *cobra.Command {
 				case "github":
 					output.PrintGitHub(results, cfg.Model)
 				default:
-					output.Print(results, cfg.Model, verbose)
+					output.Print(results, cfg.Model, verbose, cfg.TestDir)
 				}
 			} else {
-				passed, failed, cached, skipped, errored := 0, 0, 0, 0, 0
+				passed, failed, cached, skipped, flaky, errored := 0, 0, 0, 0, 0, 0
 				for _, r := range results {
 					switch {
 					case r.Cached:
@@ -162,13 +162,15 @@ func newRunCmd() *cobra.Command {
 						skipped++
 					case r.Errored:
 						errored++
+					case r.Flaky:
+						flaky++
 					case r.Passed:
 						passed++
 					default:
 						failed++
 					}
 				}
-				fmt.Fprintf(os.Stderr, "axiom: %s\n", output.CISummary(passed, failed, errored, cached, skipped))
+				fmt.Fprintf(os.Stderr, "axiom: %s\n", output.CISummary(passed, failed, errored, cached, skipped, flaky))
 			}
 
 			if output.HasFailures(results) {

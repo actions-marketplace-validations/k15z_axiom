@@ -131,6 +131,125 @@ tracked:
 	}
 }
 
+func TestDiscover_EmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	tests, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover() error: %v", err)
+	}
+	if len(tests) != 0 {
+		t.Errorf("expected 0 tests from empty dir, got %d", len(tests))
+	}
+}
+
+func TestDiscover_EmptyYAMLFile(t *testing.T) {
+	dir := t.TempDir()
+	writeYAML(t, dir, "empty.yml", "")
+
+	tests, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover() error: %v", err)
+	}
+	if len(tests) != 0 {
+		t.Errorf("expected 0 tests from empty YAML, got %d", len(tests))
+	}
+}
+
+func TestDiscover_CommentOnlyYAML(t *testing.T) {
+	dir := t.TempDir()
+	writeYAML(t, dir, "comments.yml", "# just a comment\n# nothing here\n")
+
+	tests, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover() error: %v", err)
+	}
+	if len(tests) != 0 {
+		t.Errorf("expected 0 tests from comment-only YAML, got %d", len(tests))
+	}
+}
+
+func TestDiscover_NestedSubdirectories(t *testing.T) {
+	dir := t.TempDir()
+	writeYAML(t, dir, "top.yml", `
+top_test:
+  condition: "top level"
+`)
+	writeYAML(t, dir, "sub/nested.yml", `
+nested_test:
+  condition: "nested"
+`)
+	writeYAML(t, dir, "sub/deep/deeper.yml", `
+deep_test:
+  condition: "deeply nested"
+`)
+
+	tests, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover() error: %v", err)
+	}
+	if len(tests) != 3 {
+		t.Fatalf("expected 3 tests, got %d", len(tests))
+	}
+	// Verify SourceFile tracks relative paths including subdirs
+	sourceFiles := map[string]bool{}
+	for _, tt := range tests {
+		sourceFiles[tt.SourceFile] = true
+	}
+	for _, want := range []string{"top.yml", filepath.Join("sub", "nested.yml"), filepath.Join("sub", "deep", "deeper.yml")} {
+		if !sourceFiles[want] {
+			t.Errorf("expected SourceFile %q, got %v", want, sourceFiles)
+		}
+	}
+}
+
+func TestDiscover_InvalidYAMLSyntax(t *testing.T) {
+	dir := t.TempDir()
+	writeYAML(t, dir, "bad.yml", ":\n  :\n    invalid yaml {{{\n")
+
+	_, err := Discover(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid YAML syntax")
+	}
+}
+
+func TestDiscover_DuplicateNameSameFile(t *testing.T) {
+	dir := t.TempDir()
+	// YAML spec: duplicate keys in same mapping -- last one wins in parsing,
+	// but we use yaml.Node which preserves both keys
+	writeYAML(t, dir, "dups.yml", `
+test_a:
+  condition: "first"
+test_b:
+  condition: "second"
+test_a:
+  condition: "duplicate"
+`)
+
+	_, err := Discover(dir)
+	if err == nil {
+		t.Fatal("expected error for duplicate test name within same file")
+	}
+}
+
+func TestDiscover_NonYAMLFilesIgnored(t *testing.T) {
+	dir := t.TempDir()
+	writeYAML(t, dir, "tests.yml", `
+real_test:
+  condition: "real"
+`)
+	// Write non-YAML files that should be ignored
+	os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("not yaml"), 0o644)
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"key":"val"}`), 0o644)
+
+	tests, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover() error: %v", err)
+	}
+	if len(tests) != 1 {
+		t.Errorf("expected 1 test (non-YAML files ignored), got %d", len(tests))
+	}
+}
+
 func TestDiscover_PerTestOverrides(t *testing.T) {
 	t.Run("all overrides", func(t *testing.T) {
 		dir := t.TempDir()

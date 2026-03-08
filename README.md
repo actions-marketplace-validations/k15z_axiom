@@ -10,14 +10,18 @@ Unit tests verify *implementation*. Axiom tests verify *intent*. Define invarian
 
 ```bash
 go install github.com/k15z/axiom/cmd/axiom@latest
+export ANTHROPIC_API_KEY=sk-ant-...   # or add to .env
 
-axiom init        # creates .axiom/ with a sample test and axiom.yml config
-axiom run                        # runs all tests (only re-runs if trigger files changed)
-axiom run test_auth_middleware   # run a single test by name
-axiom run --all                  # runs all tests regardless of cache
+# Add and run a test in one command
+axiom add "all API routes require authentication" --run
+
+# Or generate a batch of tests from your codebase
+axiom init
+axiom run                        # runs tests (skips unchanged)
+axiom run --all                  # ignores cache
 ```
 
-Set `ANTHROPIC_API_KEY` in your environment or a `.env` file at the project root — axiom loads it automatically.
+Axiom loads `.env` automatically. See the [Getting Started](https://k15z.github.io/axiom/getting-started.html) guide for the full walkthrough.
 
 ## Test Format
 
@@ -139,7 +143,7 @@ Exit codes:
 | `1` | One or more tests failed |
 | `2` | Configuration or setup error (missing API key, bad YAML, test dir not found) |
 
-In non-TTY environments (CI), axiom prints per-test progress lines to stderr as tests complete, plus a greppable summary line: `axiom: 8 passed, 1 failed, 1 cached`.
+In non-TTY environments (CI), axiom prints per-test progress lines to stderr as tests complete, plus a greppable summary line: `axiom: 8 passed, 1 flaky, 1 failed, 1 cached`.
 
 ## Configuration
 

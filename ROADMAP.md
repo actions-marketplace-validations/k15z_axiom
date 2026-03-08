@@ -1,6 +1,6 @@
 # Roadmap
 
-Planned improvements for axiom, roughly in priority order. Revised 2026-03-07 by the full team.
+Planned improvements for axiom, roughly in priority order. Revised 2026-03-08 by the full team.
 
 ## Done
 
@@ -37,40 +37,37 @@ Shipped features — kept here for reference.
 - **Expanded unit test coverage** — 67+ new tests across agent (14 mock-provider tests), runner (22 integration tests), config (edge cases), and provider (Gemini, retry) packages
 - **SetupError wrapping** — `add`, `init`, `validate` commands wrap setup errors for correct exit code 2
 - **CI improvements** — behavioral tests non-blocking (`continue-on-error`), rate-limit resilience
+- **`--quiet` / `-q` flag** — suppress full terminal output, emit only the CI summary line to stderr
+- **`axiom list --json`** — JSON output for the list command, consistent with `run` and `show`
+- **`axiom cache info`** — show cache entry count, total size, oldest entry, and per-test cache status
+- **Cache corruption warning** — `cache.Load()` warns on stderr when JSON is corrupt instead of failing silently
+- **`cache clear` respects config** — loads `axiom.yml` so custom `cache.dir` is respected
+- **`init` and `add` respect `test_dir` config** — both load config and use `cfg.TestDir`
+- **Cache tracks provider and base_url changes** — `HashConfig` includes provider and base_url so switching providers invalidates cached results
+- **Context-aware tools (goroutine leak fix)** — threaded `context.Context` into `toolGrep` and directory walk functions so tool timeouts cancel work instead of leaking goroutines
+- **Retry loop context cancellation fix** — `break` inside `select` only broke the select, not the `for` loop; fixed to check `ctx.Err()`
+- **stripGooglePrefix Gemini bug fix** — dead code path caused 404 errors on certain Gemini model name formats
+- **math/rand/v2 standardization** — replaced deprecated `math/rand` with `math/rand/v2` in throttle.go
+- **Exit code fix for list/show commands** — setup errors in `list` and `show` now correctly exit with code 2
+- **Hardcoded `.axiom/` path fix in output** — output now shows the actual configured `test_dir` instead of hardcoded `.axiom/`
+- **Quiet mode flaky count** — CI summary line now includes flaky test count
+- **Double space fix in dry-run header** — removed extra space in dry-run output formatting
+- **Binary releases via goreleaser** — pre-built binaries for macOS (arm64/amd64), Linux (arm64/amd64), and Windows, published to GitHub Releases
+- **`--dir` flag for cache commands** — `cache clear` and `cache info` accept `--dir` for consistency with other commands
+- **Getting-started restructure** — leads with `axiom add` as the entry point instead of `axiom init`
+- **README Quick Start update** — `axiom add` is now the first command shown
+- **Docs cleanup** — removed AI-isms, deduplicated agent memory explanations across pages, added `axiom validate` to CI tips
+- **CI docs PR comment example** — already correct (captures output and exit code in one run)
 
 ## Next Up
 
-High-priority items that directly impact adoption and reliability. Target: next 2-4 weeks.
+High-priority items that directly impact adoption and reliability.
 
 ### Distribution & Releases
 
-- **Binary releases via goreleaser** — pre-built binaries for macOS (arm64/amd64), Linux (arm64/amd64), and Windows. Published to GitHub Releases on each tagged version. This is the #1 adoption blocker — requiring `go install` excludes most potential users.
 - **Homebrew formula** — `brew install axiom` for macOS/Linux users.
 - **Curl installer** — `curl -fsSL https://axiom.dev/install.sh | sh` for quick setup.
 - **Semver tagged releases** — proper `v1.x.x` tags with changelogs. The GitHub Action should reference version tags (`@v1`) instead of `@main`.
-
-### Bug Fixes
-
-- **`cache clear` respects config** — currently uses `config.Default()` instead of loading `axiom.yml`, so custom `cache.dir` is ignored. This is a bug.
-- **`init` and `add` respect `test_dir` config** — both hardcode `.axiom` instead of reading `test_dir` from `axiom.yml`.
-- **Cache tracks provider and base_url changes** — `HashConfig` only hashes model, max_iterations, max_tokens. Switching providers should invalidate cached results.
-
-### CLI Polish
-
-- **`--quiet` / `-q` flag** — suppress full terminal output, only emit the CI summary line. Essential for CI pipelines that just need the exit code.
-- **`axiom list --json`** — `run` and `show` support `--json` but `list` doesn't. Consistency across all commands.
-- **`axiom cache info`** — show cache entry count, total size, oldest entry, and per-test cache status. Helps debug "why isn't my test being cached?"
-- **Warn on silent cache corruption** — `cache.Load()` currently swallows corrupt JSON silently. Should warn the user that cache was reset.
-
-### Reliability
-
-- **Context-aware tools (goroutine leak fix)** — thread `context.Context` into `toolGrep` and directory walk functions so tool timeouts actually cancel work instead of abandoning goroutines. Fixes a known leak (`tools.go:161-169`) that worsens with concurrent tests on large repos.
-
-### Quick Docs Fixes
-
-- **Restructure getting-started to lead with `axiom add`** — `axiom add "all API routes require auth"` is the fastest path to value and the best "aha moment." It should be front-and-center, not buried. This is a page reorder, not a feature.
-- **Fix CI docs manual PR comment example** — current example runs axiom twice (once for output, once for exit code), wasting API costs. Rewrite to capture both in one run.
-- **Promote `axiom validate` in docs** — add `axiom validate` to getting-started and CI docs as a recommended pre-run step. Catches vague conditions and bad globs before wasting API calls.
 
 ## Medium-Term
 
@@ -78,11 +75,6 @@ Important improvements that expand axiom's reach and improve the developer exper
 
 ### Documentation & Adoption
 
-- **Cross-language examples** — example tests for Python, JavaScript/TypeScript, Java, and Rust projects. Most axiom users won't be Go developers.
-- **Agent memory docs page** — dedicated page explaining how notes work, how to debug stale notes, and when to clear. This is a key differentiator (cost reduction over time) that's currently under-documented.
-- **"Axiom vs X" positioning page** — address "why not just use a linter / ArchUnit / semgrep?" Head-on comparison helps developers understand the value proposition.
-- **CI examples for CircleCI and Jenkins** — expand beyond GitHub Actions and GitLab CI.
-- **CI cache persistence guide** — document caching `.axiom/.cache/` for non-GitHub CI systems.
 - **Document streaming behavior per provider** — note that Anthropic shows live streaming progress while OpenAI and Gemini show results after each test completes. Manages expectations, zero code change.
 
 ### Architecture & Tech Debt

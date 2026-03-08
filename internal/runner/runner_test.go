@@ -493,6 +493,65 @@ func TestRun_UsageAccumulation(t *testing.T) {
 	}
 }
 
+func TestRun_RetryCancelledContext(t *testing.T) {
+	// Regression test: cancelling context during retries should stop retrying.
+	// Previously, `break` inside `select` only broke the select, not the for loop.
+	var callCount int64
+	mock := &mockRunnerProvider{response: func(_ string) (*provider.ChatResponse, error) {
+		n := atomic.AddInt64(&callCount, 1)
+		if n == 1 {
+			return failResponse() // initial attempt fails
+		}
+		// Should never reach here if context is cancelled before retry
+		return failResponse()
+	}}
+	cleanup := setupMock(mock)
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Use a provider that cancels context after the first call
+	origProvider := newProvider
+	newProvider = func(cfg config.Config, progress provider.ProgressFunc) provider.Provider {
+		return &cancellingProvider{mock: mock, cancel: cancel, callThreshold: 1}
+	}
+	defer func() { newProvider = origProvider }()
+
+	results, err := Run(ctx, minimalConfig(t), []discovery.Test{makeTest("test_a")}, Options{
+		Concurrency: 1,
+		Retries:     5, // many retries, but should stop after cancellation
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results[0].Passed {
+		t.Error("expected fail")
+	}
+	// With the bug fixed, we should see at most 1 call (initial) since context
+	// is cancelled before retries start. The mock cancels after call 1.
+	got := atomic.LoadInt64(&callCount)
+	if got > 2 {
+		t.Errorf("expected at most 2 API calls (cancel should stop retries), got %d", got)
+	}
+}
+
+// cancellingProvider wraps a provider and cancels a context after N calls.
+type cancellingProvider struct {
+	mock          *mockRunnerProvider
+	cancel        context.CancelFunc
+	callThreshold int64
+	calls         int64
+}
+
+func (p *cancellingProvider) Chat(ctx context.Context, params provider.ChatParams) (*provider.ChatResponse, error) {
+	n := atomic.AddInt64(&p.calls, 1)
+	resp, err := p.mock.Chat(ctx, params)
+	if n >= p.callThreshold {
+		p.cancel()
+	}
+	return resp, err
+}
+
 func TestMatchesTag_CommaSeparated(t *testing.T) {
 	test := discovery.Test{Tags: []string{"security", "auth"}}
 	if !MatchesTag(test, "security,auth") {

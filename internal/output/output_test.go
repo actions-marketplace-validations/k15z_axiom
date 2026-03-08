@@ -302,26 +302,29 @@ func TestCISummary(t *testing.T) {
 		errored int
 		cached  int
 		skipped int
+		flaky   int
 		want    string
 	}{
-		{"all passed", 5, 0, 0, 0, 0, "5 passed"},
-		{"mixed results", 3, 1, 0, 2, 0, "3 passed, 1 failed, 2 cached"},
-		{"all cached", 0, 0, 0, 10, 0, "10 cached"},
-		{"failures and skipped", 0, 2, 0, 0, 3, "2 failed, 3 skipped"},
-		{"everything", 4, 1, 0, 3, 2, "4 passed, 1 failed, 3 cached, 2 skipped"},
-		{"no tests", 0, 0, 0, 0, 0, "no tests ran"},
-		{"only failed", 0, 1, 0, 0, 0, "1 failed"},
-		{"only skipped", 0, 0, 0, 0, 5, "5 skipped"},
-		{"passed and cached", 2, 0, 0, 3, 0, "2 passed, 3 cached"},
-		{"single each", 1, 1, 0, 1, 1, "1 passed, 1 failed, 1 cached, 1 skipped"},
-		{"with errors", 3, 1, 2, 0, 0, "3 passed, 1 failed, 2 errored"},
+		{"all passed", 5, 0, 0, 0, 0, 0, "5 passed"},
+		{"mixed results", 3, 1, 0, 2, 0, 0, "3 passed, 1 failed, 2 cached"},
+		{"all cached", 0, 0, 0, 10, 0, 0, "10 cached"},
+		{"failures and skipped", 0, 2, 0, 0, 3, 0, "2 failed, 3 skipped"},
+		{"everything", 4, 1, 0, 3, 2, 0, "4 passed, 1 failed, 3 cached, 2 skipped"},
+		{"no tests", 0, 0, 0, 0, 0, 0, "no tests ran"},
+		{"only failed", 0, 1, 0, 0, 0, 0, "1 failed"},
+		{"only skipped", 0, 0, 0, 0, 5, 0, "5 skipped"},
+		{"passed and cached", 2, 0, 0, 3, 0, 0, "2 passed, 3 cached"},
+		{"single each", 1, 1, 0, 1, 1, 0, "1 passed, 1 failed, 1 cached, 1 skipped"},
+		{"with errors", 3, 1, 2, 0, 0, 0, "3 passed, 1 failed, 2 errored"},
+		{"with flaky", 2, 0, 0, 0, 0, 1, "2 passed, 1 flaky"},
+		{"flaky and failed", 1, 1, 0, 0, 0, 2, "1 passed, 2 flaky, 1 failed"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := CISummary(tc.passed, tc.failed, tc.errored, tc.cached, tc.skipped)
+			got := CISummary(tc.passed, tc.failed, tc.errored, tc.cached, tc.skipped, tc.flaky)
 			if got != tc.want {
-				t.Errorf("CISummary(%d, %d, %d, %d, %d) = %q, want %q",
-					tc.passed, tc.failed, tc.errored, tc.cached, tc.skipped, got, tc.want)
+				t.Errorf("CISummary(%d, %d, %d, %d, %d, %d) = %q, want %q",
+					tc.passed, tc.failed, tc.errored, tc.cached, tc.skipped, tc.flaky, got, tc.want)
 			}
 		})
 	}

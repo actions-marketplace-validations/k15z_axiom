@@ -202,13 +202,6 @@ Changing `model`, `max_iterations`, or `max_tokens` in `axiom.yml` automatically
 
 ## Agent Memory
 
-Axiom's agent builds notes about your codebase across runs. These notes are stored in `.axiom/.cache/notes.json` and include:
+Axiom's agent builds notes about your codebase across runs, stored in `.axiom/.cache/notes.json`. Notes are automatically invalidated when referenced files change. This reduces token usage and speeds up subsequent runs.
 
-- **Codebase-level observations** — architecture patterns, common conventions, package structure
-- **Per-test observations** — file locations, function signatures, implementation details relevant to specific tests
-
-On subsequent runs, the agent skips redundant exploration and goes straight to checking what changed. Notes are automatically invalidated when referenced files change, so you always get fresh analysis when code updates.
-
-This dramatically reduces token usage for repeated tests and improves test speed over time.
-
-**Location:** `.axiom/.cache/notes.json` (included in cache, safe to gitignore)
+See [Agent Memory](./agent-memory.md) for details on how notes work, cost savings, and debugging.

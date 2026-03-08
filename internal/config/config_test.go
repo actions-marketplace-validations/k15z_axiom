@@ -425,6 +425,68 @@ func TestLoadWithoutKey_DotEnvIntegration(t *testing.T) {
 	}
 }
 
+func TestLoadWithoutKey_CacheEnabledExplicitFalse(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	// Explicitly setting cache.enabled: false should not be overridden by defaults
+	yml := "cache:\n  enabled: false\n"
+	if err := os.WriteFile("axiom.yml", []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithoutKey("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Cache.Enabled {
+		t.Error("Cache.Enabled should be false when explicitly set")
+	}
+}
+
+func TestLoadWithoutKey_EmptyAxiomYml(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if err := os.WriteFile("axiom.yml", []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithoutKey("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// All fields should get defaults
+	d := Default()
+	if cfg.Model != d.Model {
+		t.Errorf("Model = %q, want default %q", cfg.Model, d.Model)
+	}
+	if cfg.Agent.MaxIterations != d.Agent.MaxIterations {
+		t.Errorf("MaxIterations = %d, want default %d", cfg.Agent.MaxIterations, d.Agent.MaxIterations)
+	}
+	if cfg.Agent.ToolTimeout != d.Agent.ToolTimeout {
+		t.Errorf("ToolTimeout = %d, want default %d", cfg.Agent.ToolTimeout, d.Agent.ToolTimeout)
+	}
+}
+
+func TestLoadDotEnv_ValueWithEquals(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	key := "AXIOM_TEST_DOTENV_EQUALS"
+	os.Unsetenv(key)
+	t.Cleanup(func() { os.Unsetenv(key) })
+
+	// Value contains '=' which should be preserved
+	if err := os.WriteFile(".env", []byte(key+"=abc=def=ghi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loadDotEnv()
+	if got := os.Getenv(key); got != "abc=def=ghi" {
+		t.Errorf("expected %q, got %q", "abc=def=ghi", got)
+	}
+}
+
 func TestLoadWithoutKey_FullAxiomYml(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

@@ -28,12 +28,12 @@ func newListCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadWithoutKey(dir)
 			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
+				return &SetupError{Err: fmt.Errorf("loading config: %w", err)}
 			}
 
 			tests, err := discovery.Discover(cfg.TestDir)
 			if err != nil {
-				return fmt.Errorf("discovery: %w", err)
+				return &SetupError{Err: fmt.Errorf("discovery: %w", err)}
 			}
 			if len(tests) == 0 {
 				fmt.Println("No tests found.")

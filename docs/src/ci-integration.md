@@ -1,10 +1,8 @@
 # CI Integration
 
-Axiom is designed to run in CI pipelines. This page covers GitHub Actions setup, cache persistence, and PR comment integration.
-
 ## GitHub Action (Recommended)
 
-The easiest way to run axiom in CI is with the reusable GitHub Action:
+The fastest way to add axiom to CI:
 
 ```yaml
 # .github/workflows/axiom.yml
@@ -225,7 +223,7 @@ Axiom uses distinct exit codes so CI can distinguish between test failures and s
 In non-TTY environments (CI), axiom prints progress lines to stderr as tests complete, plus a greppable summary:
 
 ```
-axiom: 8 passed, 1 failed, 1 cached
+axiom: 8 passed, 1 flaky, 1 failed, 1 cached
 ```
 
 ## Cost Management
@@ -368,3 +366,4 @@ Tests should show `cached (pass)` status. If all tests show `pending`, the cache
 - **Use `--tag`** to run different test suites on different triggers (e.g., security tests on main only)
 - **Set `--concurrency`** to 3-5 for faster runs (default auto-detects)
 - **Add `--retries 1`** to detect flaky tests without failing the build
+- **Run `axiom validate`** before `axiom run` to catch malformed tests before spending API calls

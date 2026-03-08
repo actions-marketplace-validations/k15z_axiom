@@ -18,7 +18,7 @@ var (
 	bold   = color.New(color.Bold)
 )
 
-func Print(results []types.TestResult, model string, verbose bool) {
+func Print(results []types.TestResult, model string, verbose bool, testDir string) {
 	fmt.Println()
 	bold.Println("  axiom")
 	fmt.Println()
@@ -34,7 +34,7 @@ func Print(results []types.TestResult, model string, verbose bool) {
 	}
 
 	for _, file := range order {
-		gray.Printf("  .axiom/%s\n", file)
+		gray.Printf("  %s%s\n", testDir, file)
 		for _, r := range groups[file] {
 			switch {
 			case r.Cached:
@@ -159,14 +159,17 @@ func Print(results []types.TestResult, model string, verbose bool) {
 	fmt.Println()
 
 	// CI-friendly summary on stderr (single greppable line)
-	fmt.Fprintf(os.Stderr, "axiom: %s\n", CISummary(passed, failed, errored, cached, skipped))
+	fmt.Fprintf(os.Stderr, "axiom: %s\n", CISummary(passed, failed, errored, cached, skipped, flaky))
 }
 
 // CISummary returns a single-line summary string suitable for CI logs.
-func CISummary(passed, failed, errored, cached, skipped int) string {
+func CISummary(passed, failed, errored, cached, skipped, flaky int) string {
 	var parts []string
 	if passed > 0 {
 		parts = append(parts, fmt.Sprintf("%d passed", passed))
+	}
+	if flaky > 0 {
+		parts = append(parts, fmt.Sprintf("%d flaky", flaky))
 	}
 	if failed > 0 {
 		parts = append(parts, fmt.Sprintf("%d failed", failed))
@@ -301,9 +304,9 @@ func formatTokens(n int) string {
 
 // PrintDryRun displays which tests would run vs be skipped (cached) and
 // estimates the maximum token cost without calling the API.
-func PrintDryRun(statuses []types.TestStatus, model string, maxTokensPerTest int) {
+func PrintDryRun(statuses []types.TestStatus, model string, maxTokensPerTest int, testDir string) {
 	fmt.Println()
-	bold.Println("  axiom  --dry-run")
+	bold.Println("  axiom --dry-run")
 	fmt.Println()
 
 	// Group by source file (same pattern as Print)
@@ -319,7 +322,7 @@ func PrintDryRun(statuses []types.TestStatus, model string, maxTokensPerTest int
 	wouldRun := 0
 	wouldSkip := 0
 	for _, file := range order {
-		gray.Printf("  .axiom/%s\n", file)
+		gray.Printf("  %s%s\n", testDir, file)
 		for _, s := range groups[file] {
 			if strings.HasPrefix(s.Status, "cached-") {
 				gray.Printf("    ○ %s (cached)\n", s.Test.Name)

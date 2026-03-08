@@ -213,7 +213,7 @@ func runNewTest(cfg config.Config, testName string) error {
 		return err
 	}
 
-	output.Print(results, cfg.Model, false)
+	output.Print(results, cfg.Model, false, cfg.TestDir)
 
 	if output.HasFailures(results) {
 		os.Exit(1)

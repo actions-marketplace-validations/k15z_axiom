@@ -28,18 +28,18 @@ func newShowCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadWithoutKey(dir)
 			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
+				return &SetupError{Err: fmt.Errorf("loading config: %w", err)}
 			}
 
 			tests, err := discovery.Discover(cfg.TestDir)
 			if err != nil {
-				return fmt.Errorf("discovery: %w", err)
+				return &SetupError{Err: fmt.Errorf("discovery: %w", err)}
 			}
 
 			configHash := cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens, cfg.Provider, cfg.BaseURL)
 			c, err := cache.Load(cfg.Cache.Dir, configHash)
 			if err != nil {
-				return fmt.Errorf("loading cache: %w", err)
+				return &SetupError{Err: fmt.Errorf("loading cache: %w", err)}
 			}
 
 			repoRoot, _ := filepath.Abs(".")

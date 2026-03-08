@@ -23,11 +23,13 @@ func newCacheCmd() *cobra.Command {
 }
 
 func newCacheClearCmd() *cobra.Command {
-	return &cobra.Command{
+	var dir string
+
+	cmd := &cobra.Command{
 		Use:   "clear",
 		Short: "Clear the test cache",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := config.LoadMinimal("")
+			cfg := config.LoadMinimal(dir)
 			if err := runner.ClearCache(cfg.Cache.Dir); err != nil {
 				return fmt.Errorf("clearing cache: %w", err)
 			}
@@ -35,14 +37,19 @@ func newCacheClearCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVarP(&dir, "dir", "d", "", "Path to test directory")
+	return cmd
 }
 
 func newCacheInfoCmd() *cobra.Command {
-	return &cobra.Command{
+	var dir string
+
+	cmd := &cobra.Command{
 		Use:   "info",
 		Short: "Show cache statistics",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := config.LoadMinimal("")
+			cfg := config.LoadMinimal(dir)
 
 			configHash := cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens, cfg.Provider, cfg.BaseURL)
 			c, err := cache.Load(cfg.Cache.Dir, configHash)
@@ -110,6 +117,9 @@ func newCacheInfoCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVarP(&dir, "dir", "d", "", "Path to test directory")
+	return cmd
 }
 
 func formatSize(bytes int64) string {

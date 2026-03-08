@@ -31,7 +31,7 @@ This is the most important field. The agent reads it and explores your codebase 
 
 ### Behavioral vs Implementation Tests
 
-The most important principle for writing good axiom tests: **assert behavior, not implementation**. Tests should describe *what* property should hold, not *how* it is implemented. This makes tests robust to refactoring -- if someone renames a function, restructures packages, or changes an approach, the behavioral property is still testable.
+The most important principle for writing good axiom tests: **assert behavior, not implementation**. Tests should describe *what* property should hold, not *how* it is implemented. Tests survive refactors -- if someone renames a function, restructures packages, or changes an approach, the behavioral property is still testable.
 
 **Good (behavioral):** Describes the property that matters.
 
@@ -215,17 +215,9 @@ This is useful for:
 
 ## Agent Memory
 
-Axiom's agent learns about your codebase across runs. On the first run, the agent explores thoroughly. On subsequent runs (if files haven't changed), the agent skips redundant exploration and goes straight to evaluation.
+Axiom's agent builds notes about your codebase across runs, so it skips redundant exploration on subsequent runs. This is automatic -- notes are stored in `.axiom/.cache/notes.json` and invalidated when referenced files change.
 
-This caching of observations (called "notes") is automatic and transparent:
-
-- **First run:** Agent explores broadly, builds notes about architecture, patterns, file locations
-- **Subsequent runs:** Agent reads cached notes, checks what files changed, re-evaluates affected tests
-- **When files change:** Notes for affected tests are automatically invalidated and rebuilt
-
-The result: faster tests over time, and lower token usage after the initial run.
-
-Notes are stored in `.axiom/.cache/notes.json` and can safely be gitignored (like the rest of the cache).
+See [Agent Memory](./agent-memory.md) for details on how notes work, debugging stale notes, and when to clear.
 
 ## Organizing Tests
 

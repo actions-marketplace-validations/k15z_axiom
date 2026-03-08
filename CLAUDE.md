@@ -36,9 +36,11 @@ go run ./cmd/axiom/ run --all  # Run all axiom behavioral tests (requires ANTHRO
 
 ## Workflow
 
+- **All changes go through PRs** — never commit directly to `main`. Create a branch, do the work, open a PR, merge after CI passes.
 - Branch naming: `claude/<descriptive-name>` for Claude Code sessions
-- CI runs `go build`, `go vet`, `go test` on all PRs
+- CI runs `go build`, `go vet`, `go test -race` on all PRs
 - PRs target `main`
+- Before opening a PR, verify `go build ./... && go vet ./... && go test ./...` passes locally
 - After creating a PR, wait for CI checks to pass before merging
 - Use `gh pr create` and `gh pr merge` for PR operations
 

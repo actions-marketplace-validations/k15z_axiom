@@ -105,12 +105,20 @@ axiom add <intent> [flags]
 | `--file` | `-f` | `tests.yml` | Target YAML file inside `.axiom/` |
 | `--run` | | `false` | Run the new test immediately after adding |
 
+### Interactive Flow
+
+In a terminal, `add` shows the generated test and asks for confirmation before writing. If multiple `.yml` files exist in the test directory, it prompts you to choose one. After writing, it offers to run the test (or runs automatically with `--run`).
+
+In non-TTY environments (piped input, CI), all prompts are skipped -- the test is written directly to the target file.
+
+The generated YAML is validated before writing. If the LLM produces invalid output, the command errors without writing.
+
 ### Examples
 
 ```bash
 axiom add "all API routes require authentication"
 axiom add "no package imports from the CLI layer" --file architecture.yml
-axiom add "database connections are always closed" -f db.yml
+axiom add "database connections are always closed" -f db.yml --run
 ```
 
 ## axiom list
@@ -193,8 +201,14 @@ axiom version
 Clear the test cache, forcing all tests to re-run.
 
 ```
-axiom cache clear
+axiom cache clear [flags]
 ```
+
+### Flags
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--dir` | `-d` | | Path to test directory |
 
 Respects `cache.dir` from `axiom.yml` if configured.
 
@@ -203,5 +217,11 @@ Respects `cache.dir` from `axiom.yml` if configured.
 Show cache statistics: entry count, file size, oldest/newest entries, and per-test pass/fail breakdown.
 
 ```
-axiom cache info
+axiom cache info [flags]
 ```
+
+### Flags
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--dir` | `-d` | | Path to test directory |

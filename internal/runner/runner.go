@@ -329,10 +329,8 @@ func (e *testExecutor) execute(ctx context.Context, t discovery.Test, progress a
 	// Skip retries for infrastructure errors (API failures, timeouts).
 	if !tr.Passed && !tr.Errored && e.retries > 0 {
 		for retry := 1; retry <= e.retries; retry++ {
-			select {
-			case <-ctx.Done():
+			if ctx.Err() != nil {
 				break
-			default:
 			}
 			progress(agent.Event{Kind: "thinking", Message: fmt.Sprintf("retrying (%d/%d)…", retry, e.retries)})
 			retryResult, retryErr := agent.Run(runCtx, p, testModel, t.Condition, t.On, e.repoRoot, progress, agentOpts)

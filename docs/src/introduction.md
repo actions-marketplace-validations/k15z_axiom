@@ -13,7 +13,7 @@ Some properties of a codebase are hard to capture with traditional tests:
 - **Design patterns** -- "Every database query must use parameterized statements"
 - **Race condition guards** -- "Concurrent market finalization must use compare-and-swap"
 
-These are the things that break silently during refactors, that senior engineers catch in code review, and that new team members don't know to check. Axiom automates this.
+These break silently during refactors. Senior engineers catch them in code review -- when they remember to look. Axiom encodes these checks so they run on every commit.
 
 ## How It Works
 
