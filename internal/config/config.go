@@ -170,7 +170,7 @@ func loadDotEnv() {
 	if err != nil {
 		return
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -180,6 +180,7 @@ func loadDotEnv() {
 			continue
 		}
 		key = strings.TrimSpace(key)
+		key = strings.TrimPrefix(key, "export ")
 		val = strings.TrimSpace(val)
 		if len(val) >= 2 {
 			if (val[0] == '"' && val[len(val)-1] == '"') ||
